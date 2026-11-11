@@ -112,7 +112,14 @@ Resultado esperado:
 **4. (Opcional) Ver el dato directamente dentro de la base de datos**
 
 ```bash
-docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT * FROM notas;"'
+docker compose exec db psql -U notas_user -d notasdb -c "SELECT * FROM notas;"
+```
+Resultado esperado:
+```
+ id |       texto       |           creada
+----+-------------------+----------------------------
+  1 | Hola desde Docker | 2026-11-11 01:15:45.136786
+(1 row)
 ```
 
 ### Endpoints
@@ -155,6 +162,7 @@ docker compose down -v         # además borra el volumen con los datos
 | `/salud` responde `"db":"error"` con `password authentication failed` | Cambiaste la contraseña en `.env` después del primer arranque; PostgreSQL solo la lee al crear el volumen | `docker compose down -v` y luego `docker compose up -d --build` |
 | `could not translate host name "db"` | Ejecutaste `app.py` fuera de Docker, o los servicios no están en la misma red | Levanta todo con `docker compose up`; no ejecutes la app suelta |
 | La app se reinicia en bucle al inicio | La BD aún no estaba lista | Revisa `docker compose logs db`; el healthcheck y los reintentos lo resuelven en segundos |
+| `psql` muestra solo `--` y `(1 row)` vacío en PowerShell | PowerShell elimina las comillas dobles internas de `sh -c '..."..."'` y `psql` recibe un `SELECT` vacío | Usa el comando sin comillas anidadas: `docker compose exec db psql -U notas_user -d notasdb -c "SELECT * FROM notas;"` (cambia usuario y base si los cambiaste en `.env`) |
 | `curl` en PowerShell da error con `-H` o `-d` | `curl` es un alias de `Invoke-WebRequest` | Usa `curl.exe` o `Invoke-RestMethod` (ver arriba) |
 
 ## Estructura
