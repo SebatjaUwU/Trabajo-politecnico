@@ -180,10 +180,8 @@ docker compose down -v         # además borra el volumen con los datos
 └── README.md
 ```
 
-## Integrantes
+## Autor
 
-| Nombre | Usuario GitHub | Aporte |
-|---|---|---|
-| _Integrante 1_ | `@usuario1` | |
-| _Integrante 2_ | `@usuario2` | |
-| _Integrante 3_ | `@usuario3` | |
+| Nombre | Usuario GitHub | Grupo | Tutora |
+|---|---|---|---|
+| Juan Sebastián Parra Loaiza | `@SebatjaUwU` | B05 | Elizabeth Gómez Yepes |
