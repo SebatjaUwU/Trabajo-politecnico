@@ -1,0 +1,40 @@
+services:
+  # Contenedor 1: base de datos (imagen OFICIAL de PostgreSQL)
+  db:
+    image: postgres:16-alpine
+    container_name: notas-db
+    env_file: .env                  # POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+    volumes:
+      - datos_db:/var/lib/postgresql/data   # los datos sobreviven a "docker compose down"
+    networks:
+      - red_notas
+    # Sin "ports": la BD NO se expone al equipo anfitrión, solo a la red interna
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Contenedor 2: API web (imagen PROPIA construida con app/Dockerfile)
+  app:
+    build: ./app
+    container_name: notas-app
+    env_file: .env
+    environment:
+      DB_HOST: db                   # nombre del servicio, resuelto por el DNS interno de Docker
+      DB_PORT: "5432"
+    ports:
+      - "${APP_PORT:-5000}:5000"    # único puerto publicado hacia el anfitrión
+    depends_on:
+      db:
+        condition: service_healthy  # la app arranca solo cuando la BD responde
+    networks:
+      - red_notas
+    restart: unless-stopped
+
+networks:
+  red_notas:
+    driver: bridge
+
+volumes:
+  datos_db:
