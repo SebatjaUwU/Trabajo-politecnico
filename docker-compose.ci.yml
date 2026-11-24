@@ -1,0 +1,14 @@
+# Ajustes SOLO para las pruebas de Jenkins. Se combina con docker-compose.yml:
+#   docker compose -p notas-ci-<build> -f docker-compose.yml -f docker-compose.ci.yml up -d
+#
+# - Quita los nombres fijos (notas-app, notas-db) para que la copia de pruebas
+#   no choque con el sistema que ya esté corriendo en el equipo.
+# - No publica el puerto 5000: las pruebas se ejecutan dentro del contenedor app,
+#   así que la copia de pruebas queda totalmente aislada del anfitrión.
+services:
+  db:
+    container_name: !reset null
+  app:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
