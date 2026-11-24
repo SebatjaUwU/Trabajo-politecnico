@@ -8,3 +8,8 @@ __pycache__/
 
 # Sistema
 .DS_Store
+
+# Archivos que genera Jenkins / las pruebas
+app/reportes/
+.pytest_cache/
+compose-ci.log
