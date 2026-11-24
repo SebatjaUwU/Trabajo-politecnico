@@ -1,6 +1,9 @@
 # API de Notas en dos contenedores Docker
 
-Proyecto de la **Entrega 1 – Énfasis Profesional I (Integración Continua)**, Politécnico Grancolombiano.
+Proyecto de **Énfasis Profesional I (Integración Continua)**, Politécnico Grancolombiano.
+
+- **Entrega 1:** dos contenedores comunicados con Docker.
+- **Entrega 2:** integración continua con **Jenkins** (ver [Integración continua con Jenkins](#integración-continua-con-jenkins-entrega-2)).
 
 Una API web sencilla para **guardar y consultar notas**, dividida en dos contenedores que se comunican por una red de Docker:
 
@@ -43,8 +46,8 @@ La app **nunca usa una IP fija**: se conecta al host `db`, que es el nombre del 
 
 ```bash
 # 1. Clonar el repositorio
-git clone https://github.com/<usuario>/<repositorio>.git
-cd <repositorio>
+git clone https://github.com/SebatjaUwU/Trabajo-politecnico.git
+cd Trabajo-politecnico
 
 # 2. Crear el archivo de credenciales a partir de la plantilla
 cp .env.example .env          # Windows PowerShell: copy .env.example .env
@@ -142,6 +145,72 @@ Resultado esperado:
 - **Orden de arranque:** `db` tiene un `healthcheck` con `pg_isready`. La `app` declara `depends_on: db: condition: service_healthy`, así que Compose **no arranca la app hasta que PostgreSQL acepta conexiones**. Además, la app reintenta la conexión hasta 10 veces al iniciar, por si la BD se reinicia.
 - **Persistencia:** las notas se guardan en el volumen `datos_db`, así que sobreviven a `docker compose down`. Para borrarlas: `docker compose down -v`.
 
+## Integración continua con Jenkins (Entrega 2)
+
+Jenkins corre en su propio contenedor y usa el Docker del equipo para construir y probar el proyecto. Cada vez que hay un commit nuevo en `main`, ejecuta el `Jenkinsfile`:
+
+```
+ GitHub ──(pollSCM cada ~5 min)──► Jenkins (contenedor, puerto 8080)
+                                      │  usa /var/run/docker.sock
+   1. Checkout                        ▼
+   2. Verificar herramientas     Docker del equipo
+   3. Lint y pruebas unitarias   ├─ notas-ci-<N>  (copia de pruebas, aislada, se borra al final)
+   4. Construir imagen           └─ trabajo-politecnico (sistema real, puerto 5000)
+   5. Pruebas de integración
+   6. Desplegar (solo main)
+```
+
+| Etapa | Qué hace | Si falla |
+|---|---|---|
+| Checkout | Descarga el commit desde GitHub | No hay acceso al repo |
+| Verificar herramientas | Muestra versiones de Docker, Compose y Python | Jenkins no ve el Docker del equipo |
+| Lint y pruebas unitarias | `flake8` + 8 pruebas `pytest` con BD simulada; publica el reporte JUnit | Error de estilo o de lógica en `app.py` |
+| Construir imagen | Crea un `.env` temporal con clave aleatoria y construye la imagen de la app (`notas-app:build-<N>`) | El `Dockerfile` o `requirements.txt` están mal |
+| Pruebas de integración | Levanta app + db en una copia aislada (`docker-compose.ci.yml`), guarda una nota y la lee desde PostgreSQL (`ci/prueba_integracion.py`) | La app no se comunica con la BD |
+| Desplegar | Solo en `main` y con `DESPLEGAR` marcado: actualiza el sistema real con el `.env` guardado en Jenkins y comprueba `/salud` | Falta la credencial `notas-env` |
+
+Al final, **siempre** guarda los logs (`compose-ci.log`) y borra los contenedores, la red y el volumen de la copia de pruebas.
+
+### Puesta en marcha (una sola vez)
+
+```bash
+# 1. Levantar Jenkins (desde la raíz del repositorio)
+cd jenkins
+docker compose up -d --build        # la primera vez tarda unos minutos
+
+# 2. Clave inicial del administrador
+docker compose exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+```
+
+3. Abre **http://localhost:8080**, pega la clave, elige **Install suggested plugins** y crea tu usuario administrador.
+4. **Credencial con el `.env` real** (para la etapa Desplegar): *Manage Jenkins → Credentials → System → Global credentials → Add Credentials*
+   - Kind: **Secret file** · File: tu archivo `.env` · ID: **`notas-env`**
+5. **Crear el job:** *New Item →* nombre `api-notas` *→ Pipeline → OK*
+   - *Pipeline → Definition:* **Pipeline script from SCM** · SCM: **Git**
+   - Repository URL: `https://github.com/SebatjaUwU/Trabajo-politecnico.git` · Branch: `*/main` · Script Path: `Jenkinsfile`
+   - Guardar y pulsar **Build Now** (la primera ejecución registra el parámetro `DESPLEGAR` y el disparador).
+6. Prueba la integración continua: haz un commit cualquiera, súbelo a GitHub y en ≤ 5 minutos Jenkins lanza un build solo.
+
+### Pruebas sin Jenkins
+
+```bash
+cd app
+python -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt     # Windows: .venv\Scripts\pip install -r requirements-dev.txt
+.venv/bin/flake8 && .venv/bin/pytest -v           # Windows: .venv\Scripts\flake8 ; .venv\Scripts\pytest -v
+```
+
+### Errores comunes de Jenkins
+
+| Síntoma | Causa | Solución |
+|---|---|---|
+| `permission denied ... /var/run/docker.sock` | Jenkins no puede usar el Docker del equipo | El `jenkins/docker-compose.yml` ya usa `user: root`; recrea con `docker compose up -d --force-recreate` |
+| `Bind for 0.0.0.0:8080 failed` | Otro programa usa el 8080 | Cambia a `"8081:8080"` en `jenkins/docker-compose.yml` y entra por `http://localhost:8081` |
+| `ERROR: notas-env` / `Could not find credentials entry` | No creaste la credencial del `.env` | Paso 4, o ejecuta *Build with Parameters* desmarcando `DESPLEGAR` |
+| `Conflict. The container name "/notas-db" is already in use` en Desplegar | El sistema se levantó desde otra carpeta con otro nombre de proyecto | `docker rm -f notas-app notas-db` (los datos quedan en el volumen) y vuelve a ejecutar |
+| `/salud` con `password authentication failed` tras desplegar | La credencial `notas-env` tiene otra clave que la del volumen existente | Sube a Jenkins el mismo `.env` que usaste en la Entrega 1 |
+| El build no arranca solo tras un commit | `pollSCM` se registra en la primera ejecución | Ejecuta una vez **Build Now** a mano |
+
 ## Comandos útiles
 
 ```bash
@@ -170,11 +239,20 @@ docker compose down -v         # además borra el volumen con los datos
 ```
 .
 ├── app/
-│   ├── app.py            # API Flask
-│   ├── requirements.txt  # dependencias de Python
-│   ├── Dockerfile        # imagen propia de la app
+│   ├── app.py               # API Flask
+│   ├── requirements.txt     # dependencias de Python
+│   ├── requirements-dev.txt # pytest y flake8 (solo para Jenkins)
+│   ├── tests/               # pruebas unitarias
+│   ├── Dockerfile           # imagen propia de la app
 │   └── .dockerignore
-├── docker-compose.yml    # define los 2 contenedores, la red y el volumen
+├── ci/
+│   └── prueba_integracion.py # prueba app <-> db que ejecuta Jenkins
+├── jenkins/
+│   ├── Dockerfile           # Jenkins LTS + Docker CLI + Python
+│   └── docker-compose.yml   # levanta Jenkins en localhost:8080
+├── Jenkinsfile              # pipeline de integración continua
+├── docker-compose.yml       # define los 2 contenedores, la red y el volumen
+├── docker-compose.ci.yml    # ajustes para la copia de pruebas de Jenkins
 ├── .env.example          # plantilla de credenciales (el .env real no se sube)
 ├── .gitignore
 └── README.md
