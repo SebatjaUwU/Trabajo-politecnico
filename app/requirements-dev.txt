@@ -1,0 +1,4 @@
+# Herramientas que usa Jenkins para revisar el código (no van en la imagen de la app)
+-r requirements.txt
+pytest==8.3.4
+flake8==7.1.1

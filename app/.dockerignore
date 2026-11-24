@@ -1,3 +1,10 @@
 __pycache__/
 *.pyc
 .env
+# Solo para Jenkins / desarrollo: no entran en la imagen
+.venv/
+tests/
+reportes/
+requirements-dev.txt
+.flake8
+.pytest_cache/
