@@ -1,0 +1,22 @@
+# Jenkins en un contenedor. Levantar desde esta carpeta:
+#   cd jenkins
+#   docker compose up -d --build
+# Interfaz web: http://localhost:8080
+services:
+  jenkins:
+    build: .
+    image: jenkins-notas:lts
+    container_name: jenkins
+    # root para poder usar el socket de Docker del anfitrión (Docker Desktop).
+    # Aceptable en un laboratorio local; en producción se usaría un agente dedicado.
+    user: root
+    ports:
+      - "8080:8080"     # interfaz web
+      - "50000:50000"   # conexión de agentes
+    volumes:
+      - jenkins_home:/var/jenkins_home              # configuración, jobs e historial persisten
+      - /var/run/docker.sock:/var/run/docker.sock   # Jenkins controla el Docker del equipo
+    restart: unless-stopped
+
+volumes:
+  jenkins_home:
